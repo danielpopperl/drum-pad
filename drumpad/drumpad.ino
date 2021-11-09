@@ -4,34 +4,26 @@
 
 //***********************************************************************
 // Mapeamento dos pinos
-#define SIG  A5   // pino analógico
-#define S0   8
-#define S1   9
-#define S2   10
-// o pino EN do mux vai no GND
+#define SIG  A5
 
-int mix[3] = {S2, S1, S0};
+int analogicValue[8];
 
-int valores_analogicos[8];
+//PORTB = B00010000 // port 8 digital
+//PORTB = B00100000 // port 9 digital
+//PORTB = B01000000 // port 10 digital
+
 
 // Valores em binario
-byte ci[8][3]={
-  {0,0,0},   // 0  em decimal
-  {0,0,1},   // 1  em decimal
-  {0,1,0},   // 2  em decimal
-  {0,1,1},   // 3  em decimal
-  {1,0,0},   // 4  em decimal
-  {1,0,1},   // 5  em decimal
-  {1,1,0},   // 6  em decimal
-  {1,1,1},   // 7  em decimal
-  //  {1,0,0,0},   // 8  em decimal
-  //  {1,0,0,1},   // 9  em decimal
-  //  {1,0,1,0},   // 10 em decimal
-  //  {1,0,1,1},   // 11 em decimal
-  //  {1,1,0,0},   // 12 em decimal
-  //  {1,1,0,1},   // 13 em decimal
-  //  {1,1,1,0},   // 14 em decimal
-  //  {1,1,1,1},   // 15 em decimal
+volatile byte ci[2][3] = {
+  {B00000000, B00000000, B00000000},
+  {B00000000, B00000000, B00010000},
+  //  {B00000000, B00100000, B00000000},
+  //  {B00000000, B00100000, B00010000},
+  //  {B01000000, B00000000, B00000000},
+  //  {B01000000, B00000000, B00010000},
+  //  {B01000000, B00100000, B00000000},
+  //  {B01000000, B00100000, B00010000},
+  //    PORT 10     PORT 9     PORT 8
 };
 //***********************************************************************
 
@@ -46,7 +38,7 @@ class Mux
     byte numPins;
     bool analog;
 };
-//*************************************************************************
+
 class Pot
 {
   public:
@@ -93,7 +85,7 @@ Mux::Mux(byte outpin_, byte numPins_, bool analog_)
   pinMode(8, OUTPUT);
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
-  if (numPins > 8) pinMode(7, OUTPUT);
+  if (numPins > 8) pinMode(11, OUTPUT);
 }
 //****************************************************************************************
 
@@ -137,7 +129,7 @@ Pot::Pot(Mux mux, byte muxpin, byte command, byte control, byte channel, byte ty
 
 //************************************************************
 //***SET THE NUMBER OF CONTROLS USED**************************
-//************************************************************
+
 //---How many buttons are connected directly to pins?---------
 byte NUMBER_BUTTONS = 0;
 //---How many potentiometers are connected directly to pins?--
@@ -145,13 +137,12 @@ byte NUMBER_POTS = 0;
 //---How many buttons are connected to a multiplexer?---------
 byte NUMBER_MUX_BUTTONS = 0;
 //---How many potentiometers are connected to a multiplexer?--
-const size_t NUMBER_MUX_POTS = 3;
+byte NUMBER_MUX_POTS = 3;
 //************************************************************
 
 
 //***ANY MULTIPLEXERS? (74HC4067)************************************
 //MUX address pins must be connected to Arduino Micro 4, 5, 6, 7
-//*******************************************************************
 //Mux NAME (OUTPUT PIN, , How Many Mux Pins?(8 or 16) , Is It Analog?);
 
 //Mux M1(10, 16, false); //Digital multiplexer on Arduino pin 10
@@ -160,17 +151,16 @@ Mux M2(A5, 8, true); //Analog multiplexer on Arduino analog pin A5
 
 
 //***DEFINE POTENTIOMETERS CONNECTED TO MULTIPLEXER*******************
+
 //Pot::Pot(Mux mux, byte muxpin, byte command, byte control/note, byte channel, byte type, unsigned long threshold)
 //** Command parameter 0=NOTE  1=CC **
 //** Type parameter 0=Potentiometer 1=Piezzo **
 
 Pot MUXPOTS[] = {
-  Pot(M2, 0, 0, 48, 1, 1, 300),
-  Pot(M2, 1, 1, 48, 1, 0, 0),
-  Pot(M2, 2, 0, 48, 1, 0, 0)
+  Pot(M2, 0, 0, 10, 1, 1, 300),
+  Pot(M2, 1, 1, 48, 1, 1, 300),
+  Pot(M2, 2, 1, 55, 1, 0, 0)
 };
-
-
 //*******************************************************************
 
 
@@ -180,22 +170,18 @@ void setup() {
   //  Serial.begin(115200);
   //  pinMode(LED_BUILTIN, OUTPUT);
 
-
-//  pinMode(11, OUTPUT);
-//  pinMode(S0, OUTPUT);
-//  pinMode(S1, OUTPUT);
-//  pinMode(S2, OUTPUT);
 }
 
 void loop() {
 
-  multiplex();
-  //  for (int x = 0; x <= 7; x++){
-  //     Serial1.print("Pino ");
-  //     Serial1.print(x);
-  //     Serial1.print(" = ");
-  //     Serial1.println(valores_analogicos[x]);
-  //   }
+  multiplexReadPorts();
+
+  //  for (int x = 0; x <= 7; x++) {
+  //    Serial1.print("Pino ");
+  //    Serial1.print(x);
+  //    Serial1.print(" = ");
+  //    Serial1.println(analogicValue[x]);
+  //  }
   //  Serial1.println("");
   //  delay(300);
 
@@ -211,8 +197,6 @@ void loop() {
   //  if (NUMBER_MUX_BUTTONS != 0) updateMuxButtons();
   if (NUMBER_MUX_POTS != 0) updateMuxPots();
 }
-
-
 
 
 
@@ -265,28 +249,19 @@ void Pot::muxUpdate()
 {
   byte temp = _muxpin;
   temp = temp << 2;
+
   if (_numMuxPins > 8) PORTD = PORTD & B11000011;
   else PORTD = PORTD & B11100011;
   //PORTD = PORTD & B11000011;
+
   PORTD = PORTD | temp;
 }
-
 
 void updateMuxPots() {
   byte potmessage;
   for (int i = 0; i < NUMBER_MUX_POTS; i = i + 1) {
 
     MUXPOTS[i].muxUpdate();
-
-    //    byte aa = MUXPOTS[i].getTypeP();
-    //    byte bb = MUXPOTS[i].getMuxPin();
-    //      byte cc = MUXPOTS[i].getCommand();
-    //    Serial1.print("TYPE "); Serial1.println(aa);
-    //    Serial1.print("PORT "); Serial1.println(i);
-    //    Serial1.print("MUX PIN "); Serial1.println(bb);
-    //    Serial1.println(" ");
-    //    Serial1.print("COMMAND "); Serial1.println(cc);
-    //    delay(1000);
 
     if (MUXPOTS[i].getTypeP() == 0) {
       potmessage = MUXPOTS[i].getValue(i);
@@ -305,12 +280,12 @@ void updateMuxPots() {
     if (potmessage != 255) {
       switch (MUXPOTS[i].getCommand()) {
         case 0: //Note
-          Serial1.println("NOTE");
+          Serial1.print("NOTE "); Serial1.println(i);
           //          noteOn(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, 127);
           //          MidiUSB.flush();
           break;
         case 1: //CC
-          Serial1.println("CC");
+          Serial1.print("CC "); Serial1.println(i);
           //          controlChange(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, potmessage);
           //          MidiUSB.flush();
           break;
@@ -321,7 +296,7 @@ void updateMuxPots() {
 
 byte Pot::getValue(int i)
 {
-  _value = valores_analogicos[i];
+  _value = analogicValue[i];
   //  _value = analogRead(_pin); //0b01100000
 
   int tmp = (_oldValue - _value);
@@ -336,32 +311,18 @@ byte Pot::getValue(int i)
 
 byte Pot::getDebounce(int i)
 {
-  _value = valores_analogicos[i];
+  _value = analogicValue[i];
   _value = _value >> 3;
   //  _value = analogRead(_pin);
-  unsigned long th = getThreshold();
-  
-  unsigned long int aa = (millis() - _threshold);
-//  Serial1.print("timeP: "); Serial1.println(_timeP);
-//  Serial1.print("threshold: "); Serial1.println(aa);
-//  Serial1.print("millis: "); Serial1.println(millis());
-//  Serial1.println(" ");
-  delay(300);
 
-  if ( _value > 50 )
+  if ( _value > 70 )
   {
-    // Check if debounce time has passed - If no, exit
-    if ( _timeP <  millis() - _threshold || _statusP == 0b00000010 )
-    {
-      _timeP = millis() - _timeP;
+    _value = 0;
 
-      if ( _threshold - millis() > _threshold )
-      {
-        bitClear(_statusP, 1);
-        bitSet(_statusP, 0);
-        Serial1.println("mudou bit");
-      }
-      Serial1.println("ok");
+    // Check if debounce time has passed - If no, exit
+    if ( millis() - _threshold >= _timeP)
+    {
+      _timeP = millis();
       return 1;
     }
   }
@@ -371,14 +332,24 @@ byte Pot::getDebounce(int i)
 
 
 //***********************************************************************
-//Função de leitura dos valores
-void multiplex(){
+void multiplexReadPorts() {
 
-  for(int x=0; x <= 7; x++){
-   for (int y = 0; y <= 2; y++){
-      digitalWrite (mix[y], ci[x][y]);   
+  //    for(int x=0; x <= 7; x++){
+  //     for (int y = 0; y <= 2; y++){
+  //        digitalWrite (mix[y], ci[x][y]);
+  //      }
+  //      analogicValue[x] = analogRead(SIG);
+  //    }
+
+  for (int x = 0; x <= 1; x++) {
+    for (int y = 0; y <= 2; y++) {
+      PORTB = PORTB | ci[x][y];
     }
-    valores_analogicos[x] = analogRead(SIG);
+    analogicValue[x] = analogRead(SIG);
+
+    // Set PORTS 8, 9 and 10 to LOW
+    PORTB &= ~(1 << 4);
+    PORTB &= ~(1 << 5);
+    PORTB &= ~(1 << 6);
   }
-  
-}// fim do multiplex
+}
