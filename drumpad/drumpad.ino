@@ -1,29 +1,31 @@
 //#include <MIDIUSB.h>
 #include <Arduino.h>
+#include <TimerOne.h>
+
+#define SIG  A5
+
+
+const byte PS_128 = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler
 
 
 //***********************************************************************
-// Mapeamento dos pinos
-#define SIG  A5
-
 int analogicValue[8];
 
 //PORTB = B00010000 // port 8 digital
 //PORTB = B00100000 // port 9 digital
 //PORTB = B01000000 // port 10 digital
 
-
 // Valores em binario
-volatile byte ci[2][3] = {
+volatile byte ci[8][3] = {
   {B00000000, B00000000, B00000000},
   {B00000000, B00000000, B00010000},
-  //  {B00000000, B00100000, B00000000},
-  //  {B00000000, B00100000, B00010000},
-  //  {B01000000, B00000000, B00000000},
-  //  {B01000000, B00000000, B00010000},
-  //  {B01000000, B00100000, B00000000},
-  //  {B01000000, B00100000, B00010000},
-  //    PORT 10     PORT 9     PORT 8
+  {B00000000, B00100000, B00000000},
+  {B00000000, B00100000, B00010000},
+  {B01000000, B00000000, B00000000},
+  {B01000000, B00000000, B00010000},
+  {B01000000, B00100000, B00000000},
+  {B01000000, B00100000, B00010000},
+  // PORT 10     PORT 9     PORT 8
 };
 //***********************************************************************
 
@@ -43,15 +45,15 @@ class Pot
 {
   public:
     Pot(byte pin, byte command, byte control, byte channel, byte type);
-    Pot(Mux mux, byte muxpin , byte command, byte control, byte channel, byte type, unsigned long threshold);
+    Pot(Mux mux, byte muxpin , byte command, byte control, byte channel, byte type, unsigned long debounce, unsigned long timer);
     void muxUpdate();
     void newValue(byte command, byte value, byte channel);
     byte getValue(int i);
-    byte getDebounce(int i);
+    byte getDebounceV();
     byte getCommand();
     byte getTypeP();
     byte getMuxPin();
-    unsigned long getThreshold();
+    byte getDebounce(int i);
     byte Pcommand;
     byte Pcontrol;
     byte Pchannel;
@@ -67,9 +69,8 @@ class Pot
     int _oldValue;
     bool _changed;
     byte _enablepin;
-    unsigned long _threshold;
-    byte _statusP;
-    unsigned long _timeP;
+    unsigned long _debounce;
+    unsigned long _timer;
 };
 //*************************************************************************
 
@@ -105,15 +106,14 @@ Pot::Pot(byte pin, byte command, byte control, byte channel, byte type)
   Ptype = type;
 }
 
-Pot::Pot(Mux mux, byte muxpin, byte command, byte control, byte channel, byte type, unsigned long threshold)
+Pot::Pot(Mux mux, byte muxpin, byte command, byte control, byte channel, byte type, unsigned long debounce, unsigned long timer)
 {
   _pin = mux.outpin;
   _numMuxPins = mux.numPins;
   _muxpin = muxpin;
   _control = control;
-  _timeP = 0;
-  _threshold = threshold;
-  _statusP = 0b00000010;
+  _timer = timer;
+  _debounce = debounce;
   //  muxUpdate();
   //  _value = analogRead(_pin);
   //  _value = _value >> 3;
@@ -128,8 +128,6 @@ Pot::Pot(Mux mux, byte muxpin, byte command, byte control, byte channel, byte ty
 
 
 //************************************************************
-//***SET THE NUMBER OF CONTROLS USED**************************
-
 //---How many buttons are connected directly to pins?---------
 byte NUMBER_BUTTONS = 0;
 //---How many potentiometers are connected directly to pins?--
@@ -137,7 +135,7 @@ byte NUMBER_POTS = 0;
 //---How many buttons are connected to a multiplexer?---------
 byte NUMBER_MUX_BUTTONS = 0;
 //---How many potentiometers are connected to a multiplexer?--
-byte NUMBER_MUX_POTS = 3;
+byte NUMBER_MUX_POTS = 2;
 //************************************************************
 
 
@@ -151,46 +149,40 @@ Mux M2(A5, 8, true); //Analog multiplexer on Arduino analog pin A5
 
 
 //***DEFINE POTENTIOMETERS CONNECTED TO MULTIPLEXER*******************
-
-//Pot::Pot(Mux mux, byte muxpin, byte command, byte control/note, byte channel, byte type, unsigned long threshold)
+//Pot::Pot(Mux mux, byte muxpin, byte command, byte control/note, byte channel, byte type, unsigned long threshold, unsigned long timer)
 //** Command parameter 0=NOTE  1=CC **
 //** Type parameter 0=Potentiometer 1=Piezzo **
 
 Pot MUXPOTS[] = {
-  Pot(M2, 0, 0, 10, 1, 1, 300),
-  Pot(M2, 1, 1, 48, 1, 1, 300),
-  Pot(M2, 2, 1, 55, 1, 0, 0)
+  Pot(M2, 0, 0, 10, 1, 1, 300, 2000),
+  Pot(M2, 1, 1, 48, 1, 1, 300, 2000),
+  Pot(M2, 2, 1, 55, 1, 0, 0, 2000)
 };
 //*******************************************************************
 
 
 
 void setup() {
-  Serial1.begin(9600);
-  //  Serial.begin(115200);
+  //  Serial1.begin(9600);
+  Serial1.begin(115200);
   //  pinMode(LED_BUILTIN, OUTPUT);
 
+  ADCSRA |= PS_128;
+
+  Timer1.initialize(3000);
+  Timer1.attachInterrupt(multiplexReadPorts);
 }
 
 void loop() {
 
-  multiplexReadPorts();
-
-  //  for (int x = 0; x <= 7; x++) {
+  //  for (int x = 0; x <= 1; x++) {
   //    Serial1.print("Pino ");
   //    Serial1.print(x);
   //    Serial1.print(" = ");
   //    Serial1.println(analogicValue[x]);
   //  }
   //  Serial1.println("");
-  //  delay(300);
-
-  //  Serial1.write("Ola");
-  //  digitalWrite(11, HIGH); // sets the digital pin 13 on
-  //  delay(500);            // waits for a second
-  //  digitalWrite(11, LOW);  // sets the digital pin 13 off
-  //  delay(500);            // waits for a second
-
+  //  delay(50);
 
   //  if (NUMBER_BUTTONS != 0) updateButtons();
   //  if (NUMBER_POTS != 0) updatePots();
@@ -241,61 +233,54 @@ byte Pot::getMuxPin() {
   return _muxpin;
 }
 
-unsigned long Pot::getThreshold() {
-  return _threshold;
+byte Pot::getDebounceV() {
+  return _debounce;
 }
 
-void Pot::muxUpdate()
-{
-  byte temp = _muxpin;
-  temp = temp << 2;
-
-  if (_numMuxPins > 8) PORTD = PORTD & B11000011;
-  else PORTD = PORTD & B11100011;
-  //PORTD = PORTD & B11000011;
-
-  PORTD = PORTD | temp;
-}
+//void Pot::muxUpdate()
+//{
+//  byte temp = _muxpin;
+//  temp = temp << 2;
+//
+//  if (_numMuxPins > 8) PORTD = PORTD & B11000011;
+//  else PORTD = PORTD & B11100011;
+//  //PORTD = PORTD & B11000011;
+//
+//  PORTD = PORTD | temp;
+//}
 
 void updateMuxPots() {
   byte potmessage;
   for (int i = 0; i < NUMBER_MUX_POTS; i = i + 1) {
 
-    MUXPOTS[i].muxUpdate();
+    //    MUXPOTS[i].muxUpdate();
 
     if (MUXPOTS[i].getTypeP() == 0) {
       potmessage = MUXPOTS[i].getValue(i);
-      //      Serial1.println("ty0");
-      //      Serial1.println(potmessage);
-      //      Serial1.println(" ");
     }
+
     if (MUXPOTS[i].getTypeP() == 1) {
       potmessage = MUXPOTS[i].getDebounce(i);
-      //      Serial1.println("ty1");
-      //      Serial1.println(potmessage);
-      //      Serial1.println(" ");
     }
 
     //  Pot/Piezzo turn/hit
     if (potmessage != 255) {
-      switch (MUXPOTS[i].getCommand()) {
-        case 0: //Note
-          Serial1.print("NOTE "); Serial1.println(i);
-          //          noteOn(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, 127);
-          //          MidiUSB.flush();
-          break;
-        case 1: //CC
-          Serial1.print("CC "); Serial1.println(i);
-          //          controlChange(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, potmessage);
-          //          MidiUSB.flush();
-          break;
+      if (MUXPOTS[i].getCommand() == 0 ) {
+        Serial1.println("NOTE " + (String)i);
+        //        noteOn(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, 127);
+        //        MidiUSB.flush();
+      }
+
+      if (MUXPOTS[i].getCommand() == 1 ) {
+        Serial1.println("CC " + (String) i);
+        //          controlChange(MUXPOTS[i]->Pchannel, MUXPOTS[i]->Pcontrol, potmessage);
+        //          MidiUSB.flush();
       }
     }
   }
 }
 
-byte Pot::getValue(int i)
-{
+byte Pot::getValue(int i) {
   _value = analogicValue[i];
   //  _value = analogRead(_pin); //0b01100000
 
@@ -306,29 +291,26 @@ byte Pot::getValue(int i)
     _oldValue = _oldValue << 3; //0b01100000
     return _value >> 3;
   }
+
   return 255;
 }
 
-byte Pot::getDebounce(int i)
-{
+byte Pot::getDebounce(int i) {
   _value = analogicValue[i];
   _value = _value >> 3;
   //  _value = analogRead(_pin);
 
   if ( _value > 70 )
   {
-    _value = 0;
-
-    // Check if debounce time has passed - If no, exit
-    if ( millis() - _threshold >= _timeP)
+    if ( millis() - _timer >= _debounce)
     {
-      _timeP = millis();
+      _timer = millis();
       return 1;
     }
   }
+
   return 255;
 }
-
 
 
 //***********************************************************************
