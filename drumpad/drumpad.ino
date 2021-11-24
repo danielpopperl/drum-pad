@@ -7,9 +7,9 @@
 int potMessage = 0;
 int potMessage2 = 0;
 
-int _value = 0;
-int _value2 = 0;
-int _oldValue = 0;
+int _value[2] = {0};
+int _value2[2] = {0};
+int _oldValue[2] = {0};
 
 unsigned long timer2 = 0;
 
@@ -19,6 +19,7 @@ const byte PS_128 = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler
 
 //***********************************************************************
 int analogicValue[2] = {0};
+int analogicValue2[2] = {0};
 
 //PORTB = B00010000 // port 8 digital
 //PORTB = B00100000 // port 9 digital
@@ -133,6 +134,7 @@ byte NUMBER_POTS = 0;
 byte NUMBER_MUX_BUTTONS = 0;
 //---How many potentiometers are connected to a multiplexer?--
 byte NUMBER_MUX_POTS = 2;
+byte NUMBER_MUX_PIES = 2;
 //************************************************************
 
 
@@ -140,8 +142,8 @@ byte NUMBER_MUX_POTS = 2;
 //MUX address pins must be connected to Arduino Micro 4, 5, 6, 7
 //Mux NAME (OUTPUT PIN, , How Many Mux Pins?(8 or 16) , Is It Analog?);
 
-//Mux M1(10, 16, false); //Digital multiplexer on Arduino pin 10
-Mux M2(0, 16, true); //Analog multiplexer on Arduino analog pin A5
+Mux M1(A3, 16, true); //Digital multiplexer on Arduino pin 10
+Mux M2(A0, 16, true); //Analog multiplexer on Arduino analog pin A5
 //*******************************************************************
 
 
@@ -150,15 +152,20 @@ Mux M2(0, 16, true); //Analog multiplexer on Arduino analog pin A5
 //** Command parameter 0=NOTE  1=CC **
 //** Type parameter 0=Potentiometer 1=Piezzo **
 
+Pot MUXPIES[] = {
+  Pot(M1, 0, 0, 48, 1, 1, 120000, 100000),
+  Pot(M1, 1, 0, 58, 1, 1, 100000, 100000),
+};
+
 Pot MUXPOTS[] = {
-  Pot(M2, 0, 0, 48, 1, 1, 200000, 100000),
-  Pot(M2, 1, 1, 10, 1, 0, 100000, 100000),
+  Pot(M2, 0, 1, 10, 1, 0, 99999, 100000),
+  Pot(M2, 1, 1, 20, 1, 0, 99999, 100000),
 };
 //*******************************************************************
 
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial) {
     ;
   }
@@ -166,36 +173,30 @@ void setup() {
   //  PRR1 |= 1 << PRUSB;
   //  pinMode(LED_BUILTIN, OUTPUT);
 
-  //  ADCSRA |= PS_128; //Pre scaler 128
+  ADCSRA |= PS_128; //Pre scaler 128
 
-//  Timer1.initialize(1000);
-//  Timer1.attachInterrupt(updateMuxPots);
-
-  // Set PORTS 8, 9, 10 and 11 to LOW
-  PORTB &= ~(1 << 4);
-  PORTB &= ~(1 << 5);
-  PORTB &= ~(1 << 6);
-  PORTB &= ~(1 << 7);
+  Timer1.initialize(2000);
+  Timer1.attachInterrupt(multiplexReadPorts);
 }
 
 void loop() {
-//    multiplexReadPorts();
+  //  multiplexReadPorts();
 
-    for (int x2 = 0; x2 <= 1; x2++) {
-      multiplexReadPorts(x2);
-      Serial.print("Pino ");
-      Serial.print(x2);
-      Serial.print(" = ");
-      Serial.println(analogicValue[x2] >> 3);
-    }
-    Serial.println("");
-    delay(10);
+  //    for (int x2 = 0; x2 <= 15; x2++) {
+  //      Serial.print("Pino ");
+  //      Serial.print(x2);
+  //      Serial.print(" = ");
+  //      Serial.println(analogicValue[x2] >> 3);
+  //    }
+  //    Serial.println("");
+  //    delay(10);
 
   //  if (NUMBER_BUTTONS != 0) updateButtons();
   //  if (NUMBER_POTS != 0) updatePots();
   //  if (NUMBER_MUX_BUTTONS != 0) updateMuxButtons();
-  //  if (NUMBER_MUX_POTS != 0) updateMuxPots();
 
+  if (NUMBER_MUX_POTS != 0) updateMuxPots();
+  if (NUMBER_MUX_PIES != 0) updateMuxPiezzos();
 }
 
 
@@ -229,37 +230,35 @@ void controlChange(byte channel, byte control, byte value) {
 
 //***********************************************************************
 byte getValue(int z) {
-  multiplexReadPorts(z);
-  _value = analogicValue[z];
+  _value[z] = analogicValue[z];
 
-  int tmp = (_oldValue - _value);
+  int tmp = (_oldValue[z] - _value[z]);
 
   if (tmp >= 8 || tmp <= -(8)) {
-    _oldValue = _value >> 3;
-    _oldValue = _oldValue << 3;
+    _oldValue[z] = _value[z] >> 3;
+    _oldValue[z] = _oldValue[z] << 3;
 
-    return _value >> 3;
+    return _value[z] >> 3;
   }
 
   return 255;
 }
 
-byte getDebounce(int w) {
-  multiplexReadPorts(w);
-  _value2 = analogicValue[w] >> 3;
-
-  if ( micros() - MUXPOTS[w]._timer >= MUXPOTS[w]._debounce)
-  {
-    if ( _value2 >= 80 )
-    {
-      MUXPOTS[w]._timer = micros();
-
-      return _value2;
-    }
-  }
-
-  return 255;
-}
+//byte getDebounce(int w) {
+//  _value2 = analogicValue2[w] >> 3;
+//
+//  if ( micros() - MUXPOTS[w]._timer >= MUXPOTS[w]._debounce)
+//  {
+//    if ( _value2 >= 90  && _value2 <= 127)
+//    {
+//      MUXPOTS[w]._timer = micros();
+//
+//      return 1;
+//    }
+//  }
+//
+//  return 255;
+//}
 
 byte Pot::getCommand() {
   return Pcommand;
@@ -285,48 +284,52 @@ byte Pot::getTypeP() {
 void updateMuxPots() {
   for (int x = 0; x <= 1; x++) {
     int gType = MUXPOTS[x].getTypeP();
+    potMessage = getValue(x);
 
-    if (MUXPOTS[x].getTypeP() == 1) {
-      potMessage = getDebounce(x);
+    if (MUXPOTS[x].getTypeP() == 0 && potMessage != 255) {
+      controlChange(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, potMessage);
+      MidiUSB.flush();
 
-      if (potMessage != 255) {
-        if (MUXPOTS[x].getCommand() == 0) { // NOTE
-          Serial.println("PIEZZO " + (String)potMessage);
-          noteOn(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, 127);
+      Serial.println("POT " + (String)MUXPOTS[x].Pcontrol);
+    }
+  }
+}
+
+void updateMuxPiezzos() {
+  for (int x = 0; x <= 1; x++)
+  {
+    if ( MUXPIES[x].getCommand() == 0 ) {// NOTE
+      _value2[x] = analogicValue2[x] >> 3;
+
+      if ( micros() - MUXPIES[x]._timer >= MUXPIES[x]._debounce)
+      {
+        if ( _value2[x] >= 50 )
+        {
+          MUXPIES[x]._timer = micros();
+          noteOn(MUXPIES[x].Pchannel, MUXPIES[x].Pcontrol, 127);
           MidiUSB.flush();
+
+          Serial.println("PIEZZO " + (String)MUXPIES[x].Pcontrol);
         }
       }
     }
-
-    if (MUXPOTS[x].getTypeP() == 0) {
-      potMessage2 = getValue(x);
-
-      if (potMessage2 != 255) {
-        if (MUXPOTS[x].getCommand() == 1) { // CC
-          controlChange(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, potMessage2);
-          MidiUSB.flush();
-
-          Serial.println("POT " + (String)potMessage2);
-        }
-      }
-    }
-
   }
 }
 
 //***********************************************************************
-void multiplexReadPorts(int por) {
-  //  for (int x = 0; x <= 1; x++) {
-  for (int y = 0; y <= 3; y++) {
-    PORTB |= ci[por][y];
+void multiplexReadPorts() {
+  for (int x = 0; x <= 1; x++) {
+    for (int y = 0; y <= 3; y++) {
+      PORTB |= ci[x][y];
+    }
+
+    analogicValue[x] = analogRead(A0);
+    analogicValue2[x] = analogRead(A3);
+
+    //    Set PORTS 8, 9, 10 and 11 to LOW
+    PORTB &= ~(1 << 4);
+    PORTB &= ~(1 << 5);
+    PORTB &= ~(1 << 6);
+    PORTB &= ~(1 << 7);
   }
-
-  analogicValue[por] = analogRead(A0);
-  //  }
-
-  // Set PORTS 8, 9, 10 and 11 to LOW
-  PORTB &= ~(1 << 4);
-  PORTB &= ~(1 << 5);
-  PORTB &= ~(1 << 6);
-  PORTB &= ~(1 << 7);
 }
