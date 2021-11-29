@@ -13,7 +13,7 @@
 #define NUMBER_MUX_PIEZ 3
 //************************************************************
 
-int potMessage = 0;
+byte potMessage[NUMBER_MUX_POTS] = {0};
 
 int _valuePot[NUMBER_MUX_POTS] = {0};
 int _oldValuePot[NUMBER_MUX_POTS] = {0};
@@ -23,8 +23,8 @@ int _valuePie[NUMBER_MUX_PIEZ] = {0};
 const byte PS_128 = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler
 
 //***********************************************************************
-int analogicValue[NUMBER_MUX_POTS] = {0};
-int analogicValue2[NUMBER_MUX_PIEZ] = {0};
+int analogValuePot[NUMBER_MUX_POTS] = {0};
+int analogValuePie[NUMBER_MUX_PIEZ] = {0};
 
 // Valores em binario
 byte ci[16][4] = {
@@ -65,11 +65,11 @@ class Pot
   public:
     Pot(byte pin, byte command, byte control, byte channel, byte type);
     Pot(Mux mux, byte muxpin , byte command, byte control, byte channel, byte type, unsigned long debounce, unsigned long timer);
-    byte getValue(int i);
+    byte getValue(byte v);
     byte getCommand();
     byte getControl();
     byte getTypeP();
-    byte getDebounce(int i);
+    byte getDebounce(byte d);
     byte Pcommand;
     byte Pcontrol;
     byte Pchannel;
@@ -202,8 +202,8 @@ void controlChange(byte channel, byte control, byte value) {
 
 
 //***********************************************************************
-byte getValue(int z) {
-  _valuePot[z] = analogicValue[z];
+byte getValue(byte z) {
+  _valuePot[z] = analogValuePot[z];
 
   int tmp = (_oldValuePot[z] - _valuePot[z]);
 
@@ -255,22 +255,22 @@ byte Pot::getTypeP() {
 //}
 
 void updateMuxPots() {
-  for (int x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
-    int gType = MUXPOTS[x].getTypeP();
-    potMessage = getValue(x);
+  for (byte x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
+    byte gType = MUXPOTS[x].getTypeP();
+    potMessage[x] = getValue(x);
 
-    if (MUXPOTS[x].getTypeP() == 0 && potMessage != 255) {
-      controlChange(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, potMessage);
+    if (MUXPOTS[x].getTypeP() == 0 && potMessage[x] != 255) {
+      controlChange(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, potMessage[x]);
       MIDIUSB.flush();
     }
   }
 }
 
 void updateMuxPiezzos() {
-  for (int x = 0; x <= NUMBER_MUX_PIEZ - 1; x++)
+  for (byte x = 0; x <= NUMBER_MUX_PIEZ - 1; x++)
   {
     if ( MUXPIEZ[x].getCommand() == 0 ) {// NOTE
-      _valuePie[x] = analogicValue2[x] >> 3;
+      _valuePie[x] = analogValuePie[x] >> 3;
 
       if ( micros() - MUXPIEZ[x]._timer >= MUXPIEZ[x]._debounce)
       {     
@@ -287,22 +287,22 @@ void updateMuxPiezzos() {
 
 //***********************************************************************
 void multiplexReadPorts() {
-  for (int x = 0; x <= NUMBER_MUX_PIEZ - 1; x++) {
-    for (int y = 0; y <= 3; y++) {
+  for (byte x = 0; x <= NUMBER_MUX_PIEZ - 1; x++) {
+    for (byte y = 0; y <= 3; y++) {
       PORTB |= ci[x][y];
     }
 
-    analogicValue2[x] = analogRead(MUX_PIE);
+    analogValuePie[x] = analogRead(MUX_PIE);
 
     clearBytes();
   }
   
-  for (int x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
-    for (int y = 0; y <= 3; y++) {
+  for (byte x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
+    for (byte y = 0; y <= 3; y++) {
       PORTB |= ci[x][y];
     }
 
-    analogicValue[x] = analogRead(MUX_POT);
+    analogValuePot[x] = analogRead(MUX_POT);
 
     clearBytes();
   }
