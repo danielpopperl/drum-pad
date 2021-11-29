@@ -4,19 +4,13 @@
 #define MUX_POT  A0
 #define MUX_PIE  A3
 
-#define NUMBER_MUX_POTS 2
-#define NUMBER_MUX_PIES 3
-
 //************************************************************
-//---How many buttons are connected directly to pins?---------
-byte NUMBER_BUTTONS = 0;
-//---How many potentiometers are connected directly to pins?--
-byte NUMBER_POTS = 0;
 //---How many buttons are connected to a multiplexer?---------
-byte NUMBER_MUX_BUTTONS = 0;
-//---How many potentiometers are connected to a multiplexer?--
-//int NUMBER_MUX_POTS = 2;
-//int NUMBER_MUX_PIES = 3;
+#define NUMBER_MUX_BUTTONS 0;
+
+//---How many potentiometers/piezzos are connected to a multiplexer?--
+#define NUMBER_MUX_POTS 2
+#define NUMBER_MUX_PIEZ 3
 //************************************************************
 
 int potMessage = 0;
@@ -24,15 +18,13 @@ int potMessage = 0;
 int _valuePot[NUMBER_MUX_POTS] = {0};
 int _oldValuePot[NUMBER_MUX_POTS] = {0};
 
-int _valuePie[NUMBER_MUX_PIES] = {0};
-
+int _valuePie[NUMBER_MUX_PIEZ] = {0};
 
 const byte PS_128 = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler
 
-
 //***********************************************************************
-int analogicValue[2] = {0};
-int analogicValue2[3] = {0};
+int analogicValue[NUMBER_MUX_POTS] = {0};
+int analogicValue2[NUMBER_MUX_PIEZ] = {0};
 
 // Valores em binario
 byte ci[16][4] = {
@@ -141,7 +133,7 @@ Mux M1(MUX_PIE, 16, true); //MIX PIEZZOS
 //** Command parameter 0=NOTE  1=CC **
 //** Type parameter 0=Potentiometer 1=Piezzo **
 
-Pot MUXPIES[] = {
+Pot MUXPIEZ[] = {
   Pot(M1, 0, 0, 48, 0, 1, 100000, 100000),
   Pot(M1, 1, 0, 58, 0, 1, 100000, 100000),
   Pot(M1, 2, 0, 49, 0, 1, 100000, 100000),
@@ -162,7 +154,7 @@ void setup() {
 
   ADCSRA |= PS_128; //Pre scaler 128
 
-  Timer1.initialize(2000);
+  Timer1.initialize(1000);
   Timer1.attachInterrupt(multiplexReadPorts);
 }
 
@@ -176,12 +168,8 @@ void loop() {
   //    Serial.println("");
   //    delay(10);
 
-  //  if (NUMBER_BUTTONS != 0) updateButtons();
-  //  if (NUMBER_POTS != 0) updatePots();
-  //  if (NUMBER_MUX_BUTTONS != 0) updateMuxButtons();
-
   if (NUMBER_MUX_POTS != 0) updateMuxPots();
-  if (NUMBER_MUX_PIES != 0) updateMuxPiezzos();
+  if (NUMBER_MUX_PIEZ != 0) updateMuxPiezzos();
 }
 
 
@@ -267,7 +255,7 @@ byte Pot::getTypeP() {
 //}
 
 void updateMuxPots() {
-  for (int x = 0; x <= NUMBER_MUX_POTS-1; x++) {
+  for (int x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
     int gType = MUXPOTS[x].getTypeP();
     potMessage = getValue(x);
 
@@ -279,17 +267,17 @@ void updateMuxPots() {
 }
 
 void updateMuxPiezzos() {
-  for (int x = 0; x <= NUMBER_MUX_PIES-1; x++)
+  for (int x = 0; x <= NUMBER_MUX_PIEZ - 1; x++)
   {
-    if ( MUXPIES[x].getCommand() == 0 ) {// NOTE
+    if ( MUXPIEZ[x].getCommand() == 0 ) {// NOTE
       _valuePie[x] = analogicValue2[x] >> 3;
 
-      if ( micros() - MUXPIES[x]._timer >= MUXPIES[x]._debounce)
+      if ( micros() - MUXPIEZ[x]._timer >= MUXPIEZ[x]._debounce)
       {     
-        if ( _valuePie[x] >= 50 )
+        if ( _valuePie[x] >= 70 )
         {
-          MUXPIES[x]._timer = micros();
-          noteOn(MUXPIES[x].Pchannel, MUXPIES[x].Pcontrol, 127);
+          MUXPIEZ[x]._timer = micros();
+          noteOn(MUXPIEZ[x].Pchannel, MUXPIEZ[x].Pcontrol, 127);
           MIDIUSB.flush();
         }
       }
@@ -299,18 +287,31 @@ void updateMuxPiezzos() {
 
 //***********************************************************************
 void multiplexReadPorts() {
-  for (int x = 0; x <= 1; x++) {
+  for (int x = 0; x <= NUMBER_MUX_PIEZ - 1; x++) {
+    for (int y = 0; y <= 3; y++) {
+      PORTB |= ci[x][y];
+    }
+
+    analogicValue2[x] = analogRead(MUX_PIE);
+
+    clearBytes();
+  }
+  
+  for (int x = 0; x <= NUMBER_MUX_POTS - 1; x++) {
     for (int y = 0; y <= 3; y++) {
       PORTB |= ci[x][y];
     }
 
     analogicValue[x] = analogRead(MUX_POT);
-    analogicValue2[x] = analogRead(MUX_PIE);
 
-    //    Set PORTS 8, 9, 10 and 11 to LOW
-    PORTB &= ~(1 << 4);
-    PORTB &= ~(1 << 5);
-    PORTB &= ~(1 << 6);
-    PORTB &= ~(1 << 7);
+    clearBytes();
   }
+}
+
+void clearBytes(){
+  //    Set PORTS 8, 9, 10 and 11 to LOW
+  PORTB &= ~(1 << 4);
+  PORTB &= ~(1 << 5);
+  PORTB &= ~(1 << 6);
+  PORTB &= ~(1 << 7);
 }
