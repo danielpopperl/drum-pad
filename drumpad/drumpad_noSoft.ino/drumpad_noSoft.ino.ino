@@ -1,12 +1,11 @@
-#include <USB-MIDI.h>
 #include <Arduino.h>
 #include <TimerOne.h>
 
+#define MUX_POT  A0
+#define MUX_PIE  A3
 
-USBMIDI_CREATE_DEFAULT_INSTANCE();
-
-#define MUX1  A0
-#define MUX2  A3
+#define NUMBER_MUX_POTS 2
+#define NUMBER_MUX_PIES 3
 
 //************************************************************
 //---How many buttons are connected directly to pins?---------
@@ -16,16 +15,16 @@ byte NUMBER_POTS = 0;
 //---How many buttons are connected to a multiplexer?---------
 byte NUMBER_MUX_BUTTONS = 0;
 //---How many potentiometers are connected to a multiplexer?--
-int NUMBER_MUX_POTS = 2;
-int NUMBER_MUX_PIES = 3;
+//int NUMBER_MUX_POTS = 2;
+//int NUMBER_MUX_PIES = 3;
 //************************************************************
 
 int potMessage = 0;
 
-int _valuePot[2] = {0};
-int _oldValuePot[2] = {0};
+int _valuePot[NUMBER_MUX_POTS] = {0};
+int _oldValuePot[NUMBER_MUX_POTS] = {0};
 
-int _valuePie[3] = {0};
+int _valuePie[NUMBER_MUX_PIES] = {0};
 
 
 const byte PS_128 = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler
@@ -74,8 +73,6 @@ class Pot
   public:
     Pot(byte pin, byte command, byte control, byte channel, byte type);
     Pot(Mux mux, byte muxpin , byte command, byte control, byte channel, byte type, unsigned long debounce, unsigned long timer);
-    void muxUpdate();
-    void newValue(byte command, byte value, byte channel);
     byte getValue(int i);
     byte getCommand();
     byte getControl();
@@ -85,7 +82,6 @@ class Pot
     byte Pcontrol;
     byte Pchannel;
     byte Ptype;
-    byte MUXPOTS;
     unsigned long _debounce;
     unsigned long _timer;
 
@@ -94,8 +90,6 @@ class Pot
     byte _muxpin;
     byte _numMuxPins;
     byte _control;
-    bool _changed;
-    byte _enablepin;
 };
 //*************************************************************************
 
@@ -137,8 +131,8 @@ Pot::Pot(Mux mux, byte muxpin, byte command, byte control, byte channel, byte ty
 //MUX address pins must be connected to Arduino Micro 4, 5, 6, 7
 //Mux NAME (OUTPUT PIN, , How Many Mux Pins?(8 or 16) , Is It Analog?);
 
-Mux M2(A0, 16, true); //MUX POTS
-Mux M1(A3, 16, true); //MIX PIEZZOS
+Mux M2(MUX_POT, 16, true); //MUX POTS
+Mux M1(MUX_PIE, 16, true); //MIX PIEZZOS
 //*******************************************************************
 
 
@@ -161,12 +155,6 @@ Pot MUXPOTS[] = {
 
 
 void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    ;
-  }
-
-  MIDI.begin(1);
 
   delay(1000);
 
@@ -205,13 +193,13 @@ void loop() {
 // Fourth parameter is the velocity (64 = normal, 127 = fastest).
 
 void noteOn(byte channel, byte pitch, byte velocity) {
-  midiEventPacket_t noteOn = { 0x09, 0x90 | channel, pitch, velocity };
-  MidiUSB.sendMIDI(noteOn);
+  MIDIEvent  noteOn = { 0x09, 0x90 | channel, pitch, velocity };
+  MIDIUSB.write(noteOn);
 }
 
 void noteOff(byte channel, byte pitch, byte velocity) {
-  midiEventPacket_t noteOff = {0x08, 0x80 | channel, pitch, velocity };
-  MidiUSB.sendMIDI(noteOff);
+  MIDIEvent  noteOff = {0x08, 0x80 | channel, pitch, velocity };
+  MIDIUSB.write(noteOff);
 }
 
 // First parameter is the event type (0x0B = control change).
@@ -220,8 +208,8 @@ void noteOff(byte channel, byte pitch, byte velocity) {
 // Fourth parameter is the control value (0-127).
 
 void controlChange(byte channel, byte control, byte value) {
-  midiEventPacket_t event = {0x0B, 0xB0 | channel, control, value };
-  MidiUSB.sendMIDI(event);
+  MIDIEvent  event = {0x0B, 0xB0 | channel, control, value };
+  MIDIUSB.write(event);
 }
 
 
@@ -285,7 +273,7 @@ void updateMuxPots() {
 
     if (MUXPOTS[x].getTypeP() == 0 && potMessage != 255) {
       controlChange(MUXPOTS[x].Pchannel, MUXPOTS[x].Pcontrol, potMessage);
-      MidiUSB.flush();
+      MIDIUSB.flush();
     }
   }
 }
@@ -302,7 +290,7 @@ void updateMuxPiezzos() {
         {
           MUXPIES[x]._timer = micros();
           noteOn(MUXPIES[x].Pchannel, MUXPIES[x].Pcontrol, 127);
-          MidiUSB.flush();
+          MIDIUSB.flush();
         }
       }
     }
@@ -311,13 +299,13 @@ void updateMuxPiezzos() {
 
 //***********************************************************************
 void multiplexReadPorts() {
-  for (int x = 0; x <= 2; x++) {
+  for (int x = 0; x <= 1; x++) {
     for (int y = 0; y <= 3; y++) {
       PORTB |= ci[x][y];
     }
 
-    analogicValue[x] = analogRead(MUX1);
-    analogicValue2[x] = analogRead(MUX2);
+    analogicValue[x] = analogRead(MUX_POT);
+    analogicValue2[x] = analogRead(MUX_PIE);
 
     //    Set PORTS 8, 9, 10 and 11 to LOW
     PORTB &= ~(1 << 4);
