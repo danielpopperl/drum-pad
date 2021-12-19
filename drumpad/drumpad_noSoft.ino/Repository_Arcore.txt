@@ -1,0 +1,4 @@
+https://github.com/rkistner/arcore/tree/arduino-micro
+
+
+Este repositorio contem o código que faz o MIDI funcionar nativamente no PC
