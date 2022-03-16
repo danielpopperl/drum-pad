@@ -11,3 +11,7 @@ PROCESSO DE INSTALAÇAO
 
 COMPILALÇÃO
 RUN dumpad_noSoft
+
+
+MUDAR NOME DO ARDUINO NO USB
+C:\Program Files (x86)\Arduino\hardware\arduino\avr\cores\arcore\USBCore.cpp
