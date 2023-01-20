@@ -3,13 +3,12 @@ INSTALL arduino 1.5.7
 RUN dumpad_noSoft
 
 
-
 PROCESSO DE INSTALAÇAO
 1. instalar o arduino-1.5.7-windows.exe
 2. pegar os arquivos da pasta \arcore\hardware e substituir em C:\Program Files (x86)\Arduino\hardware\arduino
 
 
-COMPILALÇÃO
+COMPILAÇÃO
 RUN dumpad_noSoft
 
 
